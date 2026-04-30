@@ -204,7 +204,7 @@ export default function Orcamento() {
             <BarChart data={barData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
               <XAxis dataKey="name" tick={{ fill: '#8a93b0', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#8a93b0', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: '#181c25', border: '1px solid #252b3b', borderRadius: 8, color: '#e8ecf4' }} />
+              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, color: '#111', fontWeight: 600 }} />
               <Bar dataKey="valor" radius={[6, 6, 0, 0]}>
                 {barData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
               </Bar>
@@ -218,7 +218,7 @@ export default function Orcamento() {
               <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" paddingAngle={3}>
                 {pieData.map((entry, i) => <Cell key={i} fill={SECTION_COLORS[i % SECTION_COLORS.length]} />)}
               </Pie>
-              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: '#181c25', border: '1px solid #252b3b', borderRadius: 8, color: '#e8ecf4' }} />
+              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, color: '#111', fontWeight: 600 }} />
               <Legend formatter={(v) => <span style={{ color: '#8a93b0', fontSize: 11 }}>{v}</span>} />
             </PieChart>
           </ResponsiveContainer>

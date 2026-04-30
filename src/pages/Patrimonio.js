@@ -268,7 +268,7 @@ export default function Patrimonio() {
               <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" paddingAngle={3}>
                 {pieData.map((entry, i) => <Cell key={i} fill={classesComAporte[i]?.cor || '#4f8ef7'} />)}
               </Pie>
-              <Tooltip formatter={(v) => `${v}%`} contentStyle={{ background: '#181c25', border: '1px solid #252b3b', borderRadius: 8, color: '#e8ecf4' }} />
+              <Tooltip formatter={(v) => `${v}%`} contentStyle={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, color: '#111', fontWeight: 600 }} />
               <Legend formatter={(v) => <span style={{ color: '#8a93b0', fontSize: 11 }}>{v}</span>} />
             </PieChart>
           </ResponsiveContainer>
@@ -281,7 +281,7 @@ export default function Patrimonio() {
               <PolarAngleAxis dataKey="subject" tick={{ fill: '#8a93b0', fontSize: 10 }} />
               <Radar name="Atual" dataKey="Atual" stroke="#4f8ef7" fill="#4f8ef7" fillOpacity={0.3} />
               <Radar name="Ideal" dataKey="Ideal" stroke="#22d3a0" fill="#22d3a0" fillOpacity={0.15} strokeDasharray="4 2" />
-              <Tooltip contentStyle={{ background: '#181c25', border: '1px solid #252b3b', borderRadius: 8, color: '#e8ecf4' }} />
+              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, color: '#111', fontWeight: 600 }} />
               <Legend formatter={(v) => <span style={{ color: '#8a93b0', fontSize: 11 }}>{v}</span>} />
             </RadarChart>
           </ResponsiveContainer>

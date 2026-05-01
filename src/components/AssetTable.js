@@ -5,6 +5,12 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 
 const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 
+// =====================================================
+// TOKEN BRAPI - Crie sua conta grátis em brapi.dev
+// e cole seu token aqui para cotações funcionarem
+// =====================================================
+const BRAPI_TOKEN = '14mfrpB6ui4tT4E7k7PjKE';
+
 const TICKERS_B3 = [
   'AGRO3','AXIA6','BBAS3','BBSE3','BEEF3','BOVA11','BTLG11','CSMG3','CYRE3',
   'DIRR3','EGIE3','ELET6','EMBR3','EZTC3','FLRY3','GOLL4','HGBS11','HGLG11',
@@ -22,22 +28,21 @@ const CRIPTO_IDS = {
   AVAX:'avalanche-2',LINK:'chainlink',UNI:'uniswap'
 };
 
-// Busca cotação com múltiplos fallbacks
 async function fetchPrice(ticker, tipo) {
   try {
     if (tipo === 'cripto') {
       const id = CRIPTO_IDS[ticker.toUpperCase()] || ticker.toLowerCase();
-      // Tenta CoinGecko
-      const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=brl`, { signal: AbortSignal.timeout(8000) });
+      const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=brl`, { signal: AbortSignal.timeout(10000) });
       const json = await res.json();
-      if (json[id]?.brl) return json[id].brl;
+      if (json[id]?.brl) return { price: json[id].brl, source: 'CoinGecko' };
       return null;
     } else {
-      // Tenta BRAPI sem token (funciona com limite)
-      const res = await fetch(`https://brapi.dev/api/quote/${ticker}`, { signal: AbortSignal.timeout(8000) });
+      // Tenta BRAPI com token
+      const tokenParam = BRAPI_TOKEN !== 'SEU_TOKEN_AQUI' ? `?token=${BRAPI_TOKEN}` : '';
+      const res = await fetch(`https://brapi.dev/api/quote/${ticker}${tokenParam}`, { signal: AbortSignal.timeout(10000) });
       const json = await res.json();
       const p = json?.results?.[0]?.regularMarketPrice;
-      if (p && p > 0) return p;
+      if (p && p > 0) return { price: p, source: 'BRAPI' };
       return null;
     }
   } catch { return null; }
@@ -110,13 +115,14 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
   const [prices, setPrices] = useState({});
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [priceStatus, setPriceStatus] = useState({});
+  const [manualPrices, setManualPrices] = useState({});
   const [adding, setAdding] = useState(false);
   const [novo, setNovo] = useState({ nome:'', atual:'', ideal:'' });
   const [initialized, setInitialized] = useState(false);
+  const [semToken, setSemToken] = useState(BRAPI_TOKEN === 'SEU_TOKEN_AQUI');
 
   useEffect(() => {
     if (!loading && !initialized) {
-      // Se o Firebase não tem ativos ainda, usa o defaultAtivos
       const savedAtivos = data?.ativos || [];
       if (savedAtivos.length === 0 && defaultAtivos?.length > 0) {
         const inicial = { patrimonio: data?.patrimonio || 0, ativos: defaultAtivos };
@@ -152,8 +158,7 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
   const restaurarPadrao = async () => {
     if (!defaultAtivos?.length) return;
     if (!window.confirm('Restaurar os ativos padrão? Isso substituirá seus ativos atuais.')) return;
-    const inicial = { patrimonio: d.patrimonio || 0, ativos: defaultAtivos };
-    await atualizar(inicial);
+    await atualizar({ patrimonio: d.patrimonio || 0, ativos: defaultAtivos });
   };
 
   const buscarCotacoes = async () => {
@@ -165,21 +170,27 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
       if (!a.nome) continue;
       newStatus[a.nome] = 'buscando';
       setPriceStatus({...newStatus});
-      const p = await fetchPrice(a.nome, tipo);
-      if (p) { newPrices[a.nome] = p; newStatus[a.nome] = 'ok'; }
-      else { newStatus[a.nome] = 'erro'; }
+      const result = await fetchPrice(a.nome, tipo);
+      if (result) {
+        newPrices[a.nome] = result.price;
+        newStatus[a.nome] = 'ok';
+      } else {
+        newStatus[a.nome] = 'erro';
+      }
       setPriceStatus({...newStatus});
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 350));
     }
     setPrices(newPrices);
     setLoadingPrices(false);
   };
 
+  const getPreco = (nome) => prices[nome] || manualPrices[nome] || 0;
+
   const ativosCalc = ativos.map(a => {
     const desvio = (a.atual||0) - (a.ideal||0);
     const pesoRelativo = (a.ideal||0) / (totalIdeal||1);
     const valorInvestir = desvio < 0 ? pesoRelativo * aporteSugerido : 0;
-    const preco = prices[a.nome] || 0;
+    const preco = getPreco(a.nome);
     const qtdCotas = preco > 0 ? Math.floor(valorInvestir/preco) : null;
     return { ...a, desvio, valorInvestir, preco, qtdCotas };
   });
@@ -190,13 +201,27 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
     Ideal: parseFloat((a.ideal||0).toFixed(2)),
   }));
 
-  if (loading) return <div className="loading">⏳ Carregando {label}...</div>;
-
   const foundCount = Object.values(priceStatus).filter(s => s==='ok').length;
   const errorCount = Object.values(priceStatus).filter(s => s==='erro').length;
 
+  if (loading) return <div className="loading">⏳ Carregando {label}...</div>;
+
   return (
     <div>
+      {/* Aviso token */}
+      {semToken && tipo !== 'cripto' && (
+        <div className="alert alert-warning section" style={{ marginBottom: 16 }}>
+          <div>
+            <strong>⚠️ Configure seu token BRAPI para cotações automáticas</strong>
+            <p style={{ marginTop: 6, fontSize: 13 }}>
+              1. Crie conta gratuita em <strong>brapi.dev</strong> → clique em "Get API Token" → copie o token<br/>
+              2. No GitHub, abra <code>src/components/AssetTable.js</code><br/>
+              3. Substitua <code>SEU_TOKEN_AQUI</code> pelo seu token → Commit → aguarde redeploy
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Patrimônio */}
       <div className="card section">
         <div className="card-title">{icon} Patrimônio em {label}</div>
@@ -239,15 +264,13 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
           <div>
             <div className="card-title" style={{ marginBottom:4 }}>💹 Cotações Automáticas</div>
             <p style={{ color:'var(--text3)', fontSize:12 }}>
-              {tipo==='cripto' ? 'Via CoinGecko' : 'Via BRAPI (B3)'} — busca o preço atual e calcula quantas cotas comprar
+              {tipo==='cripto' ? 'Via CoinGecko (gratuito, sem token)' : 'Via BRAPI — requer token gratuito (brapi.dev)'}
             </p>
           </div>
           <button className="btn btn-primary" onClick={buscarCotacoes} disabled={loadingPrices || ativos.length===0}>
             {loadingPrices ? `⏳ Buscando... (${foundCount}/${ativos.length})` : '🔄 Buscar Cotações'}
           </button>
         </div>
-
-        {/* Status por ticker */}
         {Object.keys(priceStatus).length > 0 && (
           <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:12 }}>
             {Object.entries(priceStatus).map(([ticker, status]) => (
@@ -258,12 +281,6 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
             ))}
           </div>
         )}
-
-        {errorCount > 0 && (
-          <div className="alert alert-warning" style={{ marginTop:12 }}>
-            ⚠️ {errorCount} ativo(s) não encontrados na API. Para ETFs internacionais (VOO, QQQ), a cotação pode não estar disponível via BRAPI — insira o valor manualmente na coluna "Preço Atual".
-          </div>
-        )}
       </div>
 
       {/* Tabela */}
@@ -271,9 +288,7 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:10 }}>
           <div className="card-title" style={{ color:COLOR, marginBottom:0 }}>📋 Ativos — Quanto Comprar</div>
           {defaultAtivos?.length > 0 && (
-            <button className="btn btn-ghost btn-sm" onClick={restaurarPadrao} title="Restaurar ativos padrão">
-              ↺ Restaurar padrão
-            </button>
+            <button className="btn btn-ghost btn-sm" onClick={restaurarPadrao}>↺ Restaurar padrão</button>
           )}
         </div>
         <div className="table-wrap">
@@ -324,14 +339,11 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
                     {a.preco > 0 ? (
                       <span className="td-accent" style={{ fontWeight:600 }}>{fmt(a.preco)}</span>
                     ) : (
-                      // Campo manual para quando a API não retorna (ETFs internacionais)
                       <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                         <span style={{ color:'var(--text3)', fontSize:11 }}>R$</span>
                         <input className="form-input" type="number" placeholder="Manual"
-                          onChange={e => {
-                            const val = parseFloat(e.target.value)||0;
-                            setPrices(prev => ({...prev, [a.nome]: val}));
-                          }}
+                          value={manualPrices[a.nome] || ''}
+                          onChange={e => setManualPrices(prev => ({...prev, [a.nome]: parseFloat(e.target.value)||0}))}
                           style={{ width:85, padding:'5px 6px', fontSize:12 }} />
                       </div>
                     )}
@@ -351,7 +363,6 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
             </tbody>
           </table>
         </div>
-
         {adding ? (
           <div className="form-row-auto" style={{ marginTop:14, padding:12, background:'var(--bg3)', borderRadius:8 }}>
             <div className="form-group" style={{ minWidth:120 }}>
@@ -382,7 +393,6 @@ export default function AssetTable({ collectionName, tipo, aporteFromPatrimonio,
         )}
       </div>
 
-      {/* Gráfico */}
       {barData.length > 0 && (
         <div className="card section">
           <div className="card-title">📊 Atual vs Ideal (%)</div>
